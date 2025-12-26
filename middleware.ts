@@ -11,5 +11,9 @@ export function middleware(req: NextRequest) {
         return NextResponse.rewrite(new URL('/tft_tool', req.url));
     }
 
+    if (host.startsWith('blog.')) {
+        return NextResponse.rewrite(new URL('/blog', req.url));
+    }
+
     return NextResponse.rewrite(new URL('/(www)', req.url));
 }
