@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model accounts {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String  @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  users             users   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([provider, providerAccountId])
+}
+
+model bookmarks {
+  user_id    String    @db.Uuid
+  post_id    String    @db.Uuid
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  posts      posts     @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, post_id])
+}
+
+model comments {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  content        String
+  user_id        String          @db.Uuid
+  post_id        String          @db.Uuid
+  parent_id      String?         @db.Uuid
+  vote_score     Int?            @default(0)
+  created_at     DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?       @default(now()) @db.Timestamptz(6)
+  comments       comments?       @relation("commentsTocomments", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_comments comments[]      @relation("commentsTocomments")
+  posts          posts           @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  notifications  notifications[]
+  votes          votes[]
+
+  @@index([parent_id], map: "idx_comments_parent")
+  @@index([post_id], map: "idx_comments_post")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model follows {
+  follower_id                       String    @db.Uuid
+  following_id                      String    @db.Uuid
+  created_at                        DateTime? @default(now()) @db.Timestamptz(6)
+  users_follows_follower_idTousers  users     @relation("follows_follower_idTousers", fields: [follower_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_follows_following_idTousers users     @relation("follows_following_idTousers", fields: [following_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([follower_id, following_id])
+}
+
+model notifications {
+  id                                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipient_id                            String    @db.Uuid
+  sender_id                               String?   @db.Uuid
+  type                                    String    @db.VarChar(50)
+  post_id                                 String?   @db.Uuid
+  comment_id                              String?   @db.Uuid
+  is_read                                 Boolean?  @default(false)
+  created_at                              DateTime? @default(now()) @db.Timestamptz(6)
+  comments                                comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  posts                                   posts?    @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_notifications_recipient_idTousers users     @relation("notifications_recipient_idTousers", fields: [recipient_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_notifications_sender_idTousers    users?    @relation("notifications_sender_idTousers", fields: [sender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([recipient_id], map: "idx_notif_recipient")
+}
+
+model post_tags {
+  post_id String @db.Uuid
+  tag_id  String @db.Uuid
+  posts   posts  @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tags    tags   @relation(fields: [tag_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([post_id, tag_id])
+}
+
+model posts {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title         String          @db.VarChar(255)
+  slug          String          @unique @db.VarChar(255)
+  excerpt       String?
+  content       String
+  thumbnail     String?
+  published     Boolean?        @default(false)
+  toc           Json?
+  reading_time  Int?            @default(0)
+  view_count    Int?            @default(0)
+  vote_score    Int?            @default(0)
+  comment_count Int?            @default(0)
+  author_id     String          @db.Uuid
+  series_id     String?         @db.Uuid
+  created_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  bookmarks     bookmarks[]
+  comments      comments[]
+  notifications notifications[]
+  post_tags     post_tags[]
+  users         users           @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  series        series?         @relation(fields: [series_id], references: [id], onUpdate: NoAction)
+  votes         votes[]
+
+  @@index([author_id], map: "idx_posts_author")
+  @@index([series_id], map: "idx_posts_series")
+  @@index([slug], map: "idx_posts_slug")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model reports {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporter_id String    @db.Uuid
+  target_type String    @db.VarChar(20)
+  target_id   String    @db.Uuid
+  reason      String
+  status      String?   @default("PENDING") @db.VarChar(20)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  users       users     @relation(fields: [reporter_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model series {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String    @db.VarChar(255)
+  slug        String    @unique @db.VarChar(255)
+  description String?
+  author_id   String    @db.Uuid
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  posts       posts[]
+  users       users     @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model tags {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String      @db.VarChar(50)
+  slug      String      @unique @db.VarChar(50)
+  post_tags post_tags[]
+}
+
+model users {
+  id                                              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                           String          @unique @db.VarChar(255)
+  username                                        String          @unique @db.VarChar(50)
+  password                                        String?         @db.VarChar(255)
+  name                                            String?         @db.VarChar(100)
+  avatar                                          String?
+  bio                                             String?
+  website                                         String?         @db.VarChar(255)
+  reputation                                      Int?            @default(0)
+  created_at                                      DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at                                      DateTime?       @default(now()) @db.Timestamptz(6)
+  accounts                                        accounts[]
+  bookmarks                                       bookmarks[]
+  comments                                        comments[]
+  follows_follows_follower_idTousers              follows[]       @relation("follows_follower_idTousers")
+  follows_follows_following_idTousers             follows[]       @relation("follows_following_idTousers")
+  notifications_notifications_recipient_idTousers notifications[] @relation("notifications_recipient_idTousers")
+  notifications_notifications_sender_idTousers    notifications[] @relation("notifications_sender_idTousers")
+  posts                                           posts[]
+  reports                                         reports[]
+  series                                          series[]
+  votes                                           votes[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model votes {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  post_id    String?   @db.Uuid
+  comment_id String?   @db.Uuid
+  value      Int?      @default(1) @db.SmallInt
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  comments   comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  posts      posts?    @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, comment_id], map: "unique_comment_vote")
+  @@unique([user_id, post_id], map: "unique_post_vote")
+}

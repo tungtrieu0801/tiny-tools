@@ -1,91 +1,53 @@
+// app/blog/(post)/p/[slug]/page.tsx
+
+import { prisma } from '@/app/lib/prisma';
 import { notFound } from 'next/navigation';
-import { getPostBySlug } from '../../../data'; // Check đường dẫn import
-import VoteButton from '../../_components/VoteButton'; // Check đường dẫn import
-import TableOfContents from '../../_components/TableOfContents'; // Import mới
-import SidebarTags from '../../_components/SidebarTags'; // Import mới
+import '@/app/globals.css';
+import { parseTOC } from "@/app/blog/utils/parseTOC";
+import TableOfContents from "@/app/blog/(post)/_components/TableOfContents";
 
-interface Props {
-    params: Promise<{ slug: string }>;
-}
-
-export default async function PostDetailPage({ params }: Props) {
+export default async function PostDetailPage({
+                                                 params
+                                             }: {
+    params: Promise<{ slug: string }>
+}) {
     const { slug } = await params;
-    const post = await getPostBySlug(slug);
+    const decodedSlug = decodeURIComponent(slug);
+
+    const post = await prisma.posts.findUnique({
+        where: { slug: decodedSlug },
+        include: { users: true },
+    });
 
     if (!post) return notFound();
 
+    const { toc, content } = parseTOC(post.content);
+
     return (
-        <div className="flex flex-col lg:flex-row gap-6 justify-center">
+        <div className="bg-white min-h-screen pb-20">
+            {/* ... Phần Header giữ nguyên ... */}
+            <div className="max-w-4xl mx-auto pt-10 px-6">
+                <h1 className="text-4xl font-bold mb-4 leading-tight">{post.title}</h1>
+                {/* ... Tác giả, ngày tháng ... */}
+            </div>
 
-            {/* --- CỘT 1: TOOLBAR (VOTE) --- */}
-            <aside className="hidden xl:flex flex-col gap-6 w-16 sticky top-24 h-fit items-center z-10">
-                <VoteButton initialVotes={post.stats?.likes || 0} />
-                <button className="p-3 bg-white rounded-full shadow-md text-gray-400 hover:text-blue-600 transition" title="Lưu bài viết">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                </button>
-                <button className="p-3 bg-white rounded-full shadow-md text-gray-400 hover:text-blue-600 transition" title="Chia sẻ Facebook">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
-                </button>
-            </aside>
+            <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-4 gap-10 mt-8">
 
-            {/* --- CỘT 2: NỘI DUNG CHÍNH --- */}
-            <main className="w-full lg:w-3/4 xl:w-2/3 bg-white p-8 rounded-lg shadow-sm min-h-[80vh]">
-                {/* Meta Header */}
-                <div className="flex items-center gap-3 mb-6">
-                    <img src={post.author.avatar} alt="ava" className="w-12 h-12 rounded-full ring-2 ring-blue-50" />
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-gray-800 hover:text-blue-600 cursor-pointer text-lg">{post.author.name}</span>
-                            <button className="text-xs text-blue-600 border border-blue-600 px-2 py-0.5 rounded hover:bg-blue-50 font-medium">Follow</button>
-                        </div>
-                        <p className="text-sm text-gray-500">Đăng ngày 29/12/2025 • 5 phút đọc</p>
-                    </div>
+                {/* CỘT NỘI DUNG CHÍNH */}
+                <div className="lg:col-span-3">
+                    <article
+                        className="prose prose-lg max-w-none prose-a:text-blue-600 prose-img:rounded-xl prose-headings:scroll-mt-24"
+                        // prose-headings:scroll-mt-24 giúp khi click link nó không bị che mất bởi Header dính
+                        dangerouslySetInnerHTML={{ __html: content }}
+                    />
                 </div>
 
-                <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-6 leading-tight">
-                    {post.title}
-                </h1>
+                {/* CỘT MỤC LỤC (Gọi Component Client ở đây) */}
+                <aside className="hidden lg:block lg:col-span-1 relative">
+                    <TableOfContents toc={toc} />
+                </aside>
 
-                {/* Tags Bài viết */}
-                <div className="mb-8 flex flex-wrap gap-2">
-                    {post.tags.map(tag => (
-                        <span key={tag} className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded hover:bg-gray-200 cursor-pointer transition">
-                  #{tag}
-               </span>
-                    ))}
-                </div>
-
-                {/* Nội dung Render HTML */}
-                <div
-                    className="prose prose-lg prose-blue max-w-none
-           prose-headings:font-bold prose-headings:text-gray-800
-           prose-img:rounded-lg prose-img:shadow-md"
-                    dangerouslySetInnerHTML={{ __html: post.content }}
-                />
-            </main>
-
-            {/* --- CỘT 3: SIDEBAR (MỤC LỤC & TAGS) --- */}
-            <aside className="hidden lg:block w-full lg:w-1/4">
-                {/* 👇 QUAN TRỌNG: Gom tất cả vào 1 div sticky top-24 */}
-                <div className="sticky top-24 space-y-6">
-
-                    {/* 1. Component Mục lục */}
-                    {post.toc && post.toc.length > 0 && (
-                        <TableOfContents items={post.toc} />
-                    )}
-
-                    {/* 2. Component Tags đề xuất */}
-                    <SidebarTags />
-
-                    {/* 3. Quảng cáo / Banner */}
-                    <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-lg text-white shadow-md text-center">
-                        <p className="font-bold text-lg mb-2">TinyTools Premium</p>
-                        <button className="bg-white text-indigo-600 px-4 py-2 rounded text-sm font-bold hover:bg-gray-100 w-full">Xem ngay</button>
-                    </div>
-
-                </div>
-            </aside>
-
+            </div>
         </div>
     );
 }
